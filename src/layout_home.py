@@ -1,7 +1,7 @@
 # src/layout_home.py
 from dash import html
 
-from containers import contribution_salary_container
+from containers import contribution_salary_container, radar_container
 
 
 layout = html.Div(
@@ -13,6 +13,7 @@ layout = html.Div(
         html.Hr(),
         # 未來可以在這裡放 Radio/Dropdown 控制「選哪一隊」
         contribution_salary_container(),
-        # 之後：再把 radar / bar 的 container 放在下面
+
+        radar_container(),
     ]
 )

@@ -1,8 +1,42 @@
 from dash import Dash, dcc, html, Input, Output, State, callback
 import plotly.express as px
+import plotly.graph_objects as go
 
-from charts import plot_contribution_salary_scatter
+from charts import (
+    plot_contribution_salary_scatter,
+    plot_laa_batter_radar,
+    plot_laa_pitcher_radar
+)
 
+def radar_container():
+    """雷達圖區塊：只放圖，不放控制元件。"""
+    return html.Div([
+        html.H3(
+            "Team Radar (PR values)",
+            style={"textAlign": "center"}
+        ),
+        dcc.Graph(id="player-radar-graph"),
+    ])
+
+@callback(
+    Output("player-radar-graph", "figure"),
+    Input("apply-button", "n_clicks"),
+    State("player-type-radio", "value"),
+    State("sub-type-dropdown", "value"),
+)
+def update_radar(n_clicks, player_type, sub_type):
+    if n_clicks == 0 or not sub_type:
+        return go.Figure()
+
+    
+    group_value = sub_type[0] if isinstance(sub_type, list) else sub_type
+
+    if player_type == "batter":
+        
+        return plot_laa_batter_radar(group_code=group_value)
+
+    group_code = group_value.replace(" ", "_")
+    return plot_laa_pitcher_radar(group_code=group_code)
 
 def contribution_salary_container():
     container = html.Div([
@@ -56,7 +90,7 @@ def update_dropdown(player_type):
             {"label": "SP R", "value": "SP R"},
             {"label": "SP L", "value": "SP L"},
             {"label": "RP R", "value": "RP R"},
-            {"label": "RP L", "value": "RP L"}
+            {"label": "RP L", "value": "RP L"},
         ]
         default_value = None
 
@@ -76,9 +110,4 @@ def update_scatter(n_clicks, player_type, sub_type):
         player_type=player_type,
         roles=sub_type
     )
-
-if __name__ == "__main__":
-    app = Dash()
-    app.layout = contribution_salary_container()
-    app.run(debug=True)
     

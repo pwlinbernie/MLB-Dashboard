@@ -17,3 +17,20 @@ def query(sql: str) -> pd.DataFrame:
     result = pd.DataFrame(data=rows, columns=col_names)
     connection.close()
     return result
+
+def load_batter_raw():
+    sql = """
+    SELECT playerID, yearID, teamID, POS,
+           AB, H, "2B", "3B", HR, BB, SO, HBP, SF, SH, salary,
+           `ops+` AS OPS_plus
+    FROM batter
+    """
+    return query(sql)
+
+def load_pitcher_raw():
+    sql = """
+    SELECT playerID, yearID, teamID, POS, throws,
+           IPouts, H, ER, HR, BB, SO, ERA, fip, "fip-", salary
+    FROM pitcher
+    """
+    return query(sql)
