@@ -1,6 +1,5 @@
-from dash import Dash, dcc, html, Input, Output, State, callback
+from dash import dcc, html, Input, Output, State, callback, dash_table
 import plotly.express as px
-import plotly.graph_objects as go
 
 from charts import (
     plot_contribution_salary_scatter,
@@ -11,7 +10,8 @@ from charts import (
     plot_performance_radar,
     plot_performance_bar,
     get_overview_tiles,
-    get_team_record
+    get_team_record,
+    get_player_list
 )
 
 #--------------------------------------------------------------#
@@ -112,11 +112,31 @@ def contribution_salary_container():
         ),
         html.Button("Apply", id="apply-button", n_clicks=0),
         # 取得 scatter plot，根據 checkbox 跟 dropdown 所選的值而變化
-        html.H3(
+        html.H2(
             "Salary vs. Player Contribution",
             style={"textAlign": "center"}
         ),
-        dcc.Graph(id="player-scatter-graph")
+        dcc.Graph(id="player-scatter-graph"),
+        dcc.Dropdown(
+            id="action-dropdown",
+            options=[
+                {"label": "Retain", "value": "retain"},
+                {"label": "Trade", "value": "trade"},
+                {"label": "Extend", "value": "extend"},
+                {"label": "Option", "value": "option"},
+            ],
+            value="retain",
+            placeholder="please choose"
+        ),
+        dash_table.DataTable(
+            id="player-list",
+            data=[],
+            page_size=10,
+            sort_action="native",
+            style_cell={
+                "fontSize": "20px"
+            },
+        )
     ])
     return container
 
@@ -166,6 +186,28 @@ def update_scatter(n_clicks, player_type, sub_type):
         player_type=player_type,
         roles=sub_type
     )
+
+
+@callback(
+    Output("player-list", "data"),
+    Output("player-list", "columns"),
+    Input("apply-button", "n_clicks"),
+    Input("action-dropdown", "value"),
+    State("player-type-radio", "value"),
+    State("sub-type-dropdown", "value"),
+    prevent_initial_call=True
+)
+# 球員列表更新
+def update_player_list(n_clicks, action, player_type, sub_type):
+    if n_clicks == 0 or sub_type is None:
+        return [], []
+    players = get_player_list(
+        player_type=player_type,
+        roles=sub_type,
+        action=action
+    )
+    return players.to_dict("records"), [{"name": col.upper(), "id": col} for col in players.columns]
+
 
 #--------------------------------------------------------------#
 # Overview Container                                           #

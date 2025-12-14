@@ -1,6 +1,7 @@
-import pandas as pd
+import operator
 from typing import Literal, List
 
+import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 
@@ -94,9 +95,9 @@ TEAM_ID = "LAA"
 #--------------------------------------------------------------#
 
 # Contribution vs Salary 散布圖
-def plot_contribution_salary_scatter(player_type: Literal["batter", "pitcher"], roles: List[str]) -> go.Figure:
+def get_players(player_type: Literal["batter", "pitcher"], roles: List[str]) -> pd.DataFrame:
     """
-    畫選手貢獻和薪資的散布圖
+    取得特定位置的球員數據
     """
     # 取資料（分打者跟投手）
     roles_str = "','".join(roles)
@@ -108,7 +109,6 @@ def plot_contribution_salary_scatter(player_type: Literal["batter", "pitcher"], 
             WHERE teamID = '{TEAM_ID}'
                 AND POS IN ('{roles_str}')
         """
-        y_axis = "ops+"
 
     elif player_type == "pitcher":
         # 篩選 team, position 跟 throws（position 跟 throws concat）
@@ -118,33 +118,65 @@ def plot_contribution_salary_scatter(player_type: Literal["batter", "pitcher"], 
             WHERE teamID = '{TEAM_ID}'
                 AND POS || ' ' || throws IN ('{roles_str}')
         """
-        y_axis = "fip-"
 
+    # query db
+    pos_filter_result = query(sql=pos_filter_sql)
+    return pos_filter_result
+
+
+def get_salary_median(player_type: Literal["batter", "pitcher"]) -> float:
+    """
+    取得該 player type 的薪水中位數
+    """
     salary_sql = f"""
         SELECT salary
         FROM {player_type}
     """
     # query db
-    pos_filter_result = query(sql=pos_filter_sql)
     salary_result = query(sql=salary_sql)
     salary_median = salary_result['salary'].median()
+    return salary_median
+
+
+def get_metric_name(player_type: Literal["batter", "pitcher"]) -> str:
+    """
+    根據 player type 決定要看什麼指標（ops+ or fip-）
+    """
+    metrics = {
+        "batter": "ops+",
+        "pitcher": "fip-"
+    }
+    metric = metrics[player_type]
+    return metric
+
+def plot_contribution_salary_scatter(player_type: Literal["batter", "pitcher"], roles: List[str]) -> go.Figure:
+    """
+    畫選手貢獻和薪資的散布圖
+    """
+    y_axis = get_metric_name(player_type=player_type)
+    # 取資料
+    players = get_players(
+        player_type=player_type,
+        roles=roles
+    )
+    salary_median = get_salary_median(player_type=player_type)
     # 畫圖
     fig = px.scatter(
-        data_frame=pos_filter_result,
+        data_frame=players,
         x="salary",
         y=y_axis,
         hover_data=["playerID"]
     )
     fig.add_shape(
         type="line",
-        x0=min(pos_filter_result['salary'].min(), salary_median),
+        x0=min(players['salary'].min(), salary_median),
         y0=100,
-        x1=max(pos_filter_result['salary'].max(), salary_median),
+        x1=max(players['salary'].max(), salary_median),
         y1=100,
         line=dict(width=2, dash="dash", color="black")
     )
     fig.add_annotation(
-        x=pos_filter_result["salary"].max(),
+        x=players["salary"].max(),
         y=100,
         text=f"{y_axis.upper()} = 100",
         showarrow=False,
@@ -154,15 +186,15 @@ def plot_contribution_salary_scatter(player_type: Literal["batter", "pitcher"], 
     )
     fig.add_shape(
         type="line",
-        y0=pos_filter_result[y_axis].min(),
+        y0=players[y_axis].min(),
         x0=salary_median,
-        y1=pos_filter_result[y_axis].max(),
+        y1=players[y_axis].max(),
         x1=salary_median,
         line=dict(width=2, dash="dash", color="black")
     )
     fig.add_annotation(
         x=salary_median,
-        y=pos_filter_result[y_axis].max(),
+        y=players[y_axis].max(),
         text=f"Median salary = {salary_median:,.0f}",
         showarrow=False,
         yanchor="top",
@@ -171,6 +203,38 @@ def plot_contribution_salary_scatter(player_type: Literal["batter", "pitcher"], 
     )
 
     return fig
+
+
+def get_player_list(player_type: Literal["batter", "pitcher"], roles: List[str], action: Literal["retain", "trade", "extend", "option"]) -> pd.DataFrame:
+    """
+    根據 action 及位置篩選球員
+    """
+    op_map = {
+        "batter": operator.ge,  # >=
+        "pitcher": operator.le  # <=
+    }
+    op = op_map[player_type]
+    players = get_players(
+        player_type=player_type,
+        roles=roles
+    )
+    salary_median = get_salary_median(player_type=player_type)
+    metric = get_metric_name(player_type=player_type)
+
+    if action == "retain":
+        condition = (players["salary"] >= salary_median) & (op(players[metric], 100))
+    elif action == "trade":
+        condition = (players["salary"] >= salary_median) & (~op(players[metric], 100))
+    elif action == "extend":
+        condition = (players["salary"] < salary_median) & (op(players[metric], 100))
+    elif action == "option":
+        condition = (players["salary"] < salary_median) & (~op(players[metric], 100))
+    
+    filtered_players = players[condition]
+    filtered_players["salary"] = filtered_players["salary"].apply(lambda x: f"{x:,.0f}")
+    filtered_players[metric] = filtered_players[metric].apply(lambda x: round(float(x), 2))
+    return filtered_players
+
 
 #--------------------------------------------------------------#
 # Radar Chart: Batter Group Radar (LAA only)                   #
