@@ -414,6 +414,38 @@ def plot_laa_pitcher_radar(group_code: str) -> go.Figure:
 
     return fig
 
+# 全隊打者雷達圖
+def build_laa_hitter_team_profile() -> pd.Series | None:
+    df_raw = load_batter_raw()
+    df = compute_batter_rates(df_raw)
+    df = add_batter_pr(df)
+
+    df = df[df["teamID"] == TEAM_ID].copy()
+    df = df[df["POS"].isin(["C","1B","2B","3B","SS","OF","DH"])]
+
+    if df.empty:
+        return None
+
+    return df[BATTER_RADAR_METRICS].mean()
+
+def plot_laa_hitter_team_radar() -> go.Figure:
+    profile = build_laa_hitter_team_profile()
+    if profile is None:
+        return go.Figure(layout_title_text=f"{TEAM_ID} Hitters – No data")
+
+    metrics = profile.index.tolist()
+    values = profile.values.tolist()
+    metrics += [metrics[0]]
+    values += [values[0]]
+
+    fig = go.Figure()
+    fig.add_trace(go.Scatterpolar(r=values, theta=metrics, fill="toself", name=f"{TEAM_ID} Hitters"))
+    fig.update_layout(
+        polar=dict(radialaxis=dict(visible=True, range=[0, 100])),
+        showlegend=False,
+        title=f"{TEAM_ID} Hitters – Radar (PR values)"
+    )
+    return fig
 #--------------------------------------------------------------#
 # Overview Breakdown Bar Chart                                 #
 #--------------------------------------------------------------#

@@ -4,6 +4,7 @@ import plotly.express as px
 from charts import (
     plot_contribution_salary_scatter,
     plot_laa_batter_radar,
+    plot_laa_hitter_team_radar,
     plot_laa_pitcher_radar,
     plot_overview_breakdown,
     TEAM_ID,
@@ -218,77 +219,136 @@ def overview_container():
     tiles = get_overview_tiles(TEAM_ID)
     record = get_team_record(TEAM_ID)
 
-    def tile_box(title, diff, metric_label, metric_value):
-        diff_text = "N/A" if diff is None else f"{diff:+.1f}"
-        metric_text = "N/A" if metric_value is None else f"{metric_label}: {metric_value:.1f}"
+    sp_radar = plot_laa_pitcher_radar("SP")
+    rp_radar = plot_laa_pitcher_radar("RP")
+    h_radar  = plot_laa_hitter_team_radar()
 
+    # 左卡文字
+    w = record["W"]
+    l = record["L"]
+    rank = record["Rank"]
+
+    wl_big = "N/A" if w is None or l is None else f"{w} - {l}"
+    rank_text = "Division Rank: N/A" if rank is None else f"Division Rank: {rank}th"
+    games_text = "GAME: 162"  # 先固定；你之後若要從 DB 算也可以
+
+    # 右卡：SP/RP/H 三列（用你現有 fip- / ops+）
+    def trend_symbol(diff):
         if diff is None:
-            bg = "#f2f2f2"
-        else:
-            bg = "#d0f0c0" if diff >= 0 else "#f4cccc"
+            return "–"
+        return "▲" if diff >= 0 else "▼"
+
+    def summary_row(label, metric_label, metric_value, diff):
+        metric_value_text = "N/A" if metric_value is None else f"{metric_value:.1f}"
+        diff_color = "#0B2D5C" if diff is None else ("#0B2D5C" if diff >= 0 else "#B00020")
 
         return html.Div(
             [
-                html.H4(title, style={"margin": "0 0 4px 0"}),
-                html.Div(diff_text, style={"fontSize": "24px", "fontWeight": "600"}),
-                html.Div(metric_text, style={"fontSize": "12px"}),
+                html.Div(trend_symbol(diff), style={"width": "28px", "fontSize": "24px", "color": diff_color}),
+                html.Div(label, style={"width": "70px", "fontSize": "34px", "fontWeight": "800", "color": "#0B2D5C"}),
+                html.Div(
+                    [
+                        html.Span(f"{metric_label}: ", style={"fontWeight": "700", "color": "#555"}),
+                        html.Span(metric_value_text, style={"fontWeight": "800", "color": "#B00020"}),
+                        html.Span("   "),
+                        html.Span("DIFF: ", style={"fontWeight": "700", "color": "#555"}),
+                        html.Span("N/A" if diff is None else f"{diff:+.1f}", style={"fontWeight": "800", "color": "#B00020"}),
+                    ],
+                    style={"fontSize": "26px"},
+                ),
             ],
             style={
-                "border": "2px solid black",
-                "borderRadius": "10px",
-                "padding": "10px",
-                "width": "100px",
-                "textAlign": "center",
-                "backgroundColor": bg,
+                "display": "flex",
+                "alignItems": "center",
+                "justifyContent": "space-between",
+                "border": "2px solid #E24A4A",
+                "padding": "18px 18px",
             },
         )
 
-    # 先在這裡算好文字（不要放進 children list）
-    wl_text = "W/L: N/A" if record["W"] is None or record["L"] is None else f"W/L: {record['W']} / {record['L']}"
-    rank_text = "Standing: N/A" if record["Rank"] is None else f"Standing: {record['Rank']}"
+    conclusion_text = overview_conclusion(tiles)
 
+    html.Div(
+        conclusion_text,
+        style={
+            "marginTop": "10px",
+            "fontSize": "18px",
+            "color": "#333",
+            "fontWeight": "600",
+        },
+    ),
+
+    # 先把「Overview 下拉 + bar chart」暫時移除（下一步改成三張 radar）
     return html.Div(
         [
-            html.H2(f"Team Overview – {TEAM_ID}"),
-
+            # 上排：左戰績卡 + 右概覽卡
             html.Div(
                 [
-                    tile_box("SP", tiles["SP"]["diff"], "FIP-", tiles["SP"]["metric"]),
-                    tile_box("RP", tiles["RP"]["diff"], "FIP-", tiles["RP"]["metric"]),
-                    tile_box("H",  tiles["H"]["diff"],  "OPS+", tiles["H"]["metric"]),
-
+                    # 左：戰績卡
                     html.Div(
                         [
-                            html.P(wl_text, style={"margin": "0 0 6px 0"}),
-                            html.P(rank_text, style={"margin": "0"}),
+                            html.Div(games_text, style={"fontSize": "34px", "fontWeight": "800", "color": "#777"}),
+                            html.Div(
+                                [
+                                    html.Span(w if w is not None else "N/A",
+                                              style={"fontSize": "110px", "fontWeight": "900", "color": "#B00020"}),
+                                    html.Span(" Wins ", style={"fontSize": "28px", "color": "#B00020"}),
+                                    html.Span("  -  ", style={"fontSize": "60px", "fontWeight": "900", "color": "#222"}),
+                                    html.Span(l if l is not None else "N/A",
+                                              style={"fontSize": "110px", "fontWeight": "900", "color": "#222"}),
+                                    html.Span(" Loses", style={"fontSize": "28px", "color": "#222"}),
+                                ],
+                                style={"display": "flex", "alignItems": "baseline", "gap": "8px"},
+                            ),
+                            html.Div(rank_text, style={"fontSize": "54px", "fontWeight": "900", "color": "#0B2D5C"}),
                         ],
-                        style={"marginLeft": "40px", "fontSize": "16px"},
+                        style={
+                            "flex": "1",
+                            "border": "1px solid #DDD",
+                            "backgroundColor": "white",
+                            "padding": "24px",
+                            "minHeight": "260px",
+                        },
+                    ),
+
+                    # 右：SP/RP/H 概覽 + 結論
+                    html.Div(
+                        [
+                            summary_row("SP", "FIP-", tiles["SP"]["metric"], tiles["SP"]["diff"]),
+                            summary_row("RP", "FIP-", tiles["RP"]["metric"], tiles["RP"]["diff"]),
+                            summary_row("H",  "OPS+", tiles["H"]["metric"],  tiles["H"]["diff"]),
+                            html.Div(
+                                conclusion_text,
+                                style={
+                                    "marginTop": "10px",
+                                    "fontSize": "18px",
+                                    "color": "#333",
+                                    "fontWeight": "600",
+                                },
+                            ),
+                        ],
+                        style={"flex": "1", "display": "flex", "flexDirection": "column", "gap": "12px"},
                     ),
                 ],
-                style={"display": "flex", "alignItems": "center", "gap": "12px", "marginBottom": "20px"},
+                style={"display": "flex", "gap": "20px", "alignItems": "stretch"},
             ),
 
+            # 下排：三張 radar（Step 2 會補）
             html.Div(
                 [
-                    html.Label("Select group:"),
-                    dcc.Dropdown(
-                        id="overview-group-dropdown",
-                        options=[
-                            {"label": "Starting Pitcher (SP)", "value": "SP"},
-                            {"label": "Relief Pitcher (RP)", "value": "RP"},
-                            {"label": "Hitters (H)", "value": "H"},
-                        ],
-                        value="SP",
-                        clearable=False,
-                        style={"width": "320px"},
-                    ),
+                    dcc.Graph(figure=sp_radar, config={"displayModeBar": False}),
+                    dcc.Graph(figure=rp_radar, config={"displayModeBar": False}),
+                    dcc.Graph(figure=h_radar,  config={"displayModeBar": False}),
                 ],
-                style={"marginBottom": "10px"},
-            ),
-
-            dcc.Graph(id="overview-breakdown-chart"),
+                style={
+                    "marginTop": "26px",
+                    "display": "grid",
+                    "gridTemplateColumns": "repeat(3, minmax(320px, 1fr))",
+                    "gap": "18px",
+                },
+            )
         ],
-        style={"padding": "20px"},
+        style={"padding": "20px", "backgroundColor": "#F3F5F7", "minHeight": "100vh"},
     )
 
 @callback(
@@ -299,6 +359,74 @@ def overview_container():
 # Overview breakdown chart 更新
 def overview_breakdown_real(group):
     return plot_overview_breakdown(team_id=TEAM_ID, group=group)
+
+def overview_conclusion(tiles: dict) -> str:
+    """
+    Generate a short diagnostic conclusion based on SP/RP/H diffs.
+    diff rules:
+      - SP/RP (FIP-): diff = 100 - FIP-  (positive is good)
+      - H (OPS+)   : diff = OPS+ - 100   (positive is good)
+    """
+    def d(key: str):
+        v = tiles.get(key, {}).get("diff", None)
+        return None if v is None else float(v)
+
+    sp = d("SP")
+    rp = d("RP")
+    h  = d("H")
+
+    # missing data
+    if sp is None or rp is None or h is None:
+        return "Overall: insufficient data to generate a reliable conclusion."
+
+    pitching_avg = (sp + rp) / 2.0
+
+    # severity helper
+    def severity(x: float) -> str:
+        ax = abs(x)
+        if ax >= 10:
+            return "severely"
+        if ax >= 5:
+            return "clearly"
+        if ax >= 2:
+            return "slightly"
+        return "roughly"
+
+    # 判断主弱点（选 diff 最负的那一项）
+    weakest_key, weakest_val = min([("SP", sp), ("RP", rp), ("H", h)], key=lambda t: t[1])
+
+    # both sides status
+    pitching_bad = (sp < 0) and (rp < 0)
+    hitting_bad  = (h < 0)
+
+    if pitching_bad and hitting_bad:
+        return (
+            f"Overall weakness: both pitching and hitting are below league average. "
+            f"Primary concern: {weakest_key} ({severity(weakest_val)} below average)."
+        )
+
+    if pitching_bad and not hitting_bad:
+        return (
+            f"Overall weakness: pitching is below league average "
+            f"(SP {sp:+.1f}, RP {rp:+.1f}). "
+            f"Primary concern: {weakest_key} ({severity(weakest_val)} below average)."
+        )
+
+    if not pitching_bad and hitting_bad:
+        return (
+            f"Overall weakness: hitting is below league average (H {h:+.1f}). "
+            f"Primary concern: H ({severity(h)} below average)."
+        )
+
+    # neither is clearly bad
+    if pitching_avg > 0 and h > 0:
+        return "Overall strength: both pitching and hitting are above league average."
+    if pitching_avg > 0 and h <= 0:
+        return "Overall: pitching is solid, but hitting is around league average."
+    if pitching_avg <= 0 and h > 0:
+        return "Overall: hitting is solid, but pitching is around league average."
+
+    return "Overall: performance is around league average across pitching and hitting."
 
 #--------------------------------------------------------------#
 # Layout Pages                                                 #
@@ -431,3 +559,23 @@ def page_contribution():
         ],
         style={"padding": "16px"},
     )
+
+def overview_conclusion(tiles: dict) -> str:
+    sp = tiles["SP"]["diff"]
+    rp = tiles["RP"]["diff"]
+    h  = tiles["H"]["diff"]
+
+    # None 防呆
+    if sp is None or rp is None or h is None:
+        return "Not enough data to generate conclusion."
+
+    pitching = (sp + rp) / 2
+    hitting = h
+
+    if pitching < 0 and hitting < 0:
+        return "Overall weakness: both pitching and hitting are below league average."
+    if pitching < 0 and hitting >= 0:
+        return "Key issue: pitching is below league average. Consider upgrading rotation/bullpen depth."
+    if pitching >= 0 and hitting < 0:
+        return "Key issue: offense is below league average. Consider upgrading lineup production."
+    return "Overall: team performance is above league average in both pitching and hitting."
